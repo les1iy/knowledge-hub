@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, Search } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import {
     DocumentContent,
@@ -8,6 +8,7 @@ import { ChunkingService } from './chunking.service';
 import { EmbeddingService } from './embedding.service';
 import { PipelineOrchestrator } from './pipeline.orchestrator';
 import { VectorIndexService } from './vector-index.service';
+import { SearchIndexService } from './search-index.service';
 
 @Module({
     imports: [
@@ -19,8 +20,9 @@ import { VectorIndexService } from './vector-index.service';
         ChunkingService,
         EmbeddingService,
         VectorIndexService,
+        SearchIndexService,
         PipelineOrchestrator,
     ],
-    exports: [PipelineOrchestrator, VectorIndexService],
+    exports: [PipelineOrchestrator, VectorIndexService, SearchIndexService],
 })
 export class PipelineModule { }
