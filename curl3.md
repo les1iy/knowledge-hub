@@ -9,7 +9,7 @@ DOC_ID='docid'
 将草稿（或已发布文档）设为已发布，并投递 RabbitMQ 异步管线。
 
 ```bash
-curl -s -X PUT "http://localhost:3000/documents/365809195108274176/publish"
+curl -s -X PUT "http://localhost:3000/documents/365941383766216704/publish"
 ```
 
 成功后 `status=1`，会给 RabbitMQ 并行投递消息，当前有两条消费者管道：
