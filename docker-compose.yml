@@ -1,4 +1,49 @@
 services:
+  # 一次性权限修复服务：在其它数据服务启动前，
+  # 把宿主机 ./volumes 下各目录的属主改成对应容器运行用户的 UID/GID
+  init-permissions:
+    image: alpine:3.20
+    container_name: knowledge_hub_init_permissions
+    restart: "no"
+    user: root
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes:/vol
+    command:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        mkdir -p /vol/postgres /vol/pgadmin /vol/mongo /vol/rabbitmq /vol/es/data /vol/kibana /vol/rustfs0 /vol/neo4j/data /vol/neo4j/logs
+        # Elasticsearch / Kibana：uid 1000, gid 0
+        chown -R 1000:0 /vol/es /vol/kibana
+        # Neo4j：uid/gid 7474
+        chown -R 7474:7474 /vol/neo4j
+        # PostgreSQL / MongoDB / RabbitMQ：uid/gid 999
+        chown -R 999:999 /vol/postgres /vol/mongo /vol/rabbitmq
+        chmod 700 /vol/postgres
+                # pgAdmin：uid/gid 5050
+        chown -R 5050:5050 /vol/pgadmin
+        # 注意：RustFS 的属主在单独的 init-permissions-rustfs 服务里处理，
+        # 那里用 rustfs 镜像自带的 rustfs 用户，无需关心具体数字 UID
+        echo "volumes permissions fixed"
+
+  # RustFS 专用权限修复：直接用 rustfs 镜像，
+  # 以 root 进入后按镜像内自带的 rustfs 用户改名属主，避免猜数字 UID
+  init-permissions-rustfs:
+    image: rustfs/rustfs:latest
+    container_name: knowledge_hub_init_permissions_rustfs
+    restart: "no"
+    user: root
+    entrypoint: ["/bin/sh", "-c"]
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/rustfs0:/vol/rustfs0
+    command:
+      - |
+        set -e
+        mkdir -p /vol/rustfs0
+        chown -R rustfs:rustfs /vol/rustfs0
+        echo "rustfs volume permissions fixed"
+
   # PostgreSQL
   postgres:
     image: pgvector/pgvector:pg16
@@ -13,6 +58,9 @@ services:
     volumes:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/postgres:/var/lib/postgresql/data
       - ./init-scripts/postgresql:/docker-entrypoint-initdb.d
+    depends_on:
+      init-permissions:
+        condition: service_completed_successfully
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U user -d hello_pg" ]
       interval: 5s
@@ -36,7 +84,10 @@ services:
     ports:
       - "8088:80"
     depends_on:
-      - postgres
+      postgres:
+        condition: service_started
+      init-permissions:
+        condition: service_completed_successfully
 
   # MongoDB 主库
   mongodb:
@@ -52,6 +103,9 @@ services:
     volumes:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/mongo:/data/db
       - ./init-scripts/mongodb:/docker-entrypoint-initdb.d
+    depends_on:
+      init-permissions:
+        condition: service_completed_successfully
     healthcheck:
       test: [ "CMD", "mongosh", "--eval", "db.adminCommand('ping')", "-u", "mongo_user", "-p", "mongo_pass123", "--authenticationDatabase", "admin" ]
       interval: 10s
@@ -81,6 +135,8 @@ services:
     depends_on:
       mongodb:
         condition: service_healthy
+      init-permissions:
+        condition: service_completed_successfully
 
   # Redis — 密码重置验证码等
   # redis:
@@ -125,6 +181,9 @@ services:
       RABBITMQ_DEFAULT_PASS: guest
     volumes:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/rabbitmq:/var/lib/rabbitmq
+    depends_on:
+      init-permissions:
+        condition: service_completed_successfully
     healthcheck:
       test: [ "CMD", "rabbitmq-diagnostics", "-q", "ping" ]
       interval: 10s
@@ -145,6 +204,9 @@ services:
       - ES_JAVA_OPTS=-Xms512m -Xmx512m # JVM 内存配置，避免占用过高
     volumes:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/es/data:/usr/share/elasticsearch/data
+    depends_on:
+      init-permissions:
+        condition: service_completed_successfully
     restart: always
 
   # Kibana 最新稳定版：8.17.0（必须与 ES 版本完全一致）
@@ -159,7 +221,10 @@ services:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/kibana:/usr/share/kibana/data
     restart: always
     depends_on:
-      - es # 等待 ES 启动完成后再启动 Kibana
+      es:
+        condition: service_started # 等待 ES 启动后再启动 Kibana
+      init-permissions:
+        condition: service_completed_successfully
 
   # RustFS（S3 兼容对象存储）— PDF 抽图 / 原文件上传
   # 文档：https://docs.rustfs.com/installation/docker/
@@ -180,7 +245,10 @@ services:
       RUSTFS_CORS_ALLOWED_ORIGINS: "*"
       RUSTFS_UNSAFE_BYPASS_DISK_CHECK: "true"
     volumes:
-      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/rustfs0:/data/rustfs0
+            - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/rustfs0:/data/rustfs0
+    depends_on:
+      init-permissions-rustfs:
+        condition: service_completed_successfully
     healthcheck:
       test: [ "CMD-SHELL", "curl -f http://127.0.0.1:9000/health || exit 1" ]
       interval: 15s
@@ -202,6 +270,9 @@ services:
     volumes:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/neo4j/data:/data
       - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/neo4j/logs:/logs
+    depends_on:
+      init-permissions:
+        condition: service_completed_successfully
     restart: unless-stopped
 
 networks:
