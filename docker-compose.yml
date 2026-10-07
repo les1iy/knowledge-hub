@@ -34,7 +34,7 @@ services:
     container_name: knowledge_hub_init_permissions_rustfs
     restart: "no"
     user: root
-    entrypoint: ["/bin/sh", "-c"]
+    entrypoint: [ "/bin/sh", "-c" ]
     volumes:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/rustfs0:/vol/rustfs0
     command:
@@ -107,10 +107,11 @@ services:
       init-permissions:
         condition: service_completed_successfully
     healthcheck:
-      test: [ "CMD", "mongosh", "--eval", "db.adminCommand('ping')", "-u", "mongo_user", "-p", "mongo_pass123", "--authenticationDatabase", "admin" ]
+      test: [ "CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')", "-u", "mongo_user", "-p", "mongo_pass123", "--authenticationDatabase", "admin" ]
       interval: 10s
       timeout: 10s
-      retries: 5
+      retries: 10
+      start_period: 90s
 
   # MongoDB Web GUI: mongo-express
   mongo-express:
@@ -245,7 +246,7 @@ services:
       RUSTFS_CORS_ALLOWED_ORIGINS: "*"
       RUSTFS_UNSAFE_BYPASS_DISK_CHECK: "true"
     volumes:
-            - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/rustfs0:/data/rustfs0
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/rustfs0:/data/rustfs0
     depends_on:
       init-permissions-rustfs:
         condition: service_completed_successfully
