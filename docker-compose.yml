@@ -13,7 +13,7 @@ services:
       - -c
       - |
         set -e
-        mkdir -p /vol/postgres /vol/pgadmin /vol/mongo /vol/rabbitmq /vol/es/data /vol/kibana /vol/rustfs0 /vol/neo4j/data /vol/neo4j/logs
+        mkdir -p /vol/postgres /vol/pgadmin /vol/mongo /vol/rabbitmq /vol/es/data /vol/kibana /vol/rustfs0 /vol/neo4j/data /vol/neo4j/logs /vol/redis /vol/redisinsight
         # Elasticsearch / Kibana：uid 1000, gid 0
         chown -R 1000:0 /vol/es /vol/kibana
         # Neo4j：uid/gid 7474
@@ -23,6 +23,11 @@ services:
         chmod 700 /vol/postgres
                 # pgAdmin：uid/gid 5050
         chown -R 5050:5050 /vol/pgadmin
+        # Redis：uid 999, gid 1000（注意这里是 999:1000，不是 999:999）
+        chown -R 999:1000 /vol/redis
+        # RedisInsight：镜像以 node 用户(uid/gid 1000)运行，且不会自己改权限
+        chown -R 1000:1000 /vol/redisinsight
+
         # 注意：RustFS 的属主在单独的 init-permissions-rustfs 服务里处理，
         # 那里用 rustfs 镜像自带的 rustfs 用户，无需关心具体数字 UID
         echo "volumes permissions fixed"
@@ -48,7 +53,7 @@ services:
   postgres:
     image: pgvector/pgvector:pg16
     container_name: knowledge_hub_postgres
-    restart: always
+    restart: "no"
     environment:
       POSTGRES_USER: user
       POSTGRES_PASSWORD: 123456
@@ -62,7 +67,7 @@ services:
       init-permissions:
         condition: service_completed_successfully
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U user -d hello_pg" ]
+      test: [ "CMD-SHELL", "pg_isready -U user -d knowledge_hub" ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -93,7 +98,7 @@ services:
   mongodb:
     image: mongo:7-jammy
     container_name: knowledge_hub_mongodb
-    restart: always
+    restart: "no"
     environment:
       MONGO_INITDB_ROOT_USERNAME: mongo_user
       MONGO_INITDB_ROOT_PASSWORD: mongo_pass123
@@ -117,7 +122,7 @@ services:
   mongo-express:
     image: mongo-express:1.0.2-20-alpine3.19
     container_name: knowledge_hub_mongo_express
-    restart: always
+    restart: "no"
     ports:
       - "8081:8081"
     environment:
@@ -140,40 +145,45 @@ services:
         condition: service_completed_successfully
 
   # Redis — 密码重置验证码等
-  # redis:
-  #   image: redis:7-alpine
-  #   container_name: knowledge_hub_redis
-  #   restart: unless-stopped
-  #   ports:
-  #     - "6379:6379"
-  #   volumes:
-  #     - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/redis:/data
-  #   healthcheck:
-  #     test: [ "CMD", "redis-cli", "ping" ]
-  #     interval: 10s
-  #     timeout: 5s
-  #     retries: 5
+  redis:
+    image: redis:7-alpine
+    container_name: knowledge_hub_redis
+    restart: "no"
+    ports:
+      - "6379:6379"
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/redis:/data
+    depends_on:
+      init-permissions:
+        condition: service_completed_successfully
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-  # # Redis Web GUI: RedisInsight
-  # redisinsight:
-  #   image: redis/redisinsight:2.50
-  #   container_name: knowledge_hub_redisinsight
-  #   restart: always
-  #   ports:
-  #     - "5540:5540"
-  #   volumes:
-  #     - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/redisinsight:/data
-  #   environment:
-  #     - RI_HOST=0.0.0.0
-  #   depends_on:
-  #     redis:
-  #       condition: service_healthy
+  # Redis Web GUI: RedisInsight
+  redisinsight:
+    image: redis/redisinsight:2.50
+    container_name: knowledge_hub_redisinsight
+    restart: "no"
+    ports:
+      - "5540:5540"
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/redisinsight:/data
+    environment:
+      - RI_HOST=0.0.0.0
+    depends_on:
+      redis:
+        condition: service_healthy
+      init-permissions:
+        condition: service_completed_successfully
 
   # RabbitMQ — 文档发布后异步管线（RAG / KG / ES）
   rabbitmq:
     image: rabbitmq:3.13-management
     container_name: knowledge_hub_rabbitmq
-    restart: unless-stopped
+    restart: "no"
     ports:
       - "5672:5672" # AMQP
       - "15672:15672" # Management UI
@@ -208,7 +218,7 @@ services:
     depends_on:
       init-permissions:
         condition: service_completed_successfully
-    restart: always
+    restart: "no"
 
   # Kibana 最新稳定版：8.17.0（必须与 ES 版本完全一致）
   kibana:
@@ -220,7 +230,7 @@ services:
       - ELASTICSEARCH_HOSTS=http://es:9200 # 连接 ES 容器内部地址
     volumes:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/kibana:/usr/share/kibana/data
-    restart: always
+    restart: "no"
     depends_on:
       es:
         condition: service_started # 等待 ES 启动后再启动 Kibana
@@ -232,7 +242,7 @@ services:
   rustfs:
     image: rustfs/rustfs:latest
     container_name: knowledge_hub_rustfs
-    restart: unless-stopped
+    restart: "no"
     ports:
       - "9000:9000" # S3 API
       - "9001:9001" # Console
@@ -274,7 +284,7 @@ services:
     depends_on:
       init-permissions:
         condition: service_completed_successfully
-    restart: unless-stopped
+    restart: "no"
 
 networks:
   default:
