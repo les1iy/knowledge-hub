@@ -1,4 +1,4 @@
-import { Module, Search } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import {
     DocumentContent,
@@ -6,11 +6,11 @@ import {
 } from '../document/schemas/document-content.schema';
 import { ChunkingService } from './chunking.service';
 import { EmbeddingService } from './embedding.service';
-import { PipelineOrchestrator } from './pipeline.orchestrator';
-import { VectorIndexService } from './vector-index.service';
-import { SearchIndexService } from './search-index.service';
 import { ExtractionService } from './extraction.service';
 import { GraphBuildService } from './graph-build.service';
+import { PipelineOrchestrator } from './pipeline.orchestrator';
+import { SearchIndexService } from './search-index.service';
+import { VectorIndexService } from './vector-index.service';
 
 @Module({
     imports: [
@@ -32,6 +32,7 @@ import { GraphBuildService } from './graph-build.service';
         VectorIndexService,
         SearchIndexService,
         GraphBuildService,
+        EmbeddingService,
     ],
 })
 export class PipelineModule { }

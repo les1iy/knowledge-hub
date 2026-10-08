@@ -6,8 +6,7 @@
 
 /**
  * 一篇文档切出来的一块文本。
- * RAG：附 embedding 写入 ES `kh_chunk`（dense_vector）
- * ；KG：作为抽实体的输入单元。
+ * RAG：附 embedding 写入 ES `kh_chunk`（dense_vector）；KG：作为抽实体的输入单元。
  */
 export interface DocumentChunk {
     /** 稳定 ID：sha256(documentId:index) 前 64 位，重建时可覆盖 */
@@ -29,6 +28,19 @@ export interface DocumentChunk {
     publishTime?: string | null;
     /** 向量；分块阶段为空，EmbeddingService 填充后写入 ES dense_vector */
     embedding?: number[];
+}
+
+/** kh_chunk 检索命中（关键词 / 向量 / RRF 融合后共用） */
+export interface ChunkHit {
+    chunkId: string;
+    documentId: string;
+    documentTitle: string;
+    content: string;
+    heading: string | null;
+    /** 当前阶段得分：原始检索分、RRF 分或 rerank 分 */
+    score: number;
+    bm25Score?: number;
+    vectorScore?: number;
 }
 
 /** 图谱实体（如「张三」「入职流程」「知识库」） */
@@ -54,7 +66,6 @@ export interface ExtractionResult {
     entities: ExtractedEntity[];
     relations: ExtractedRelation[];
 }
-
 
 /**
  * 管线内部使用的「文档快照」：
