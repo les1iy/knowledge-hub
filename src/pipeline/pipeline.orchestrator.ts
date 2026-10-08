@@ -3,23 +3,26 @@ import { InjectEntityManager } from '@nestjs/typeorm';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { EntityManager } from 'typeorm';
-import { DocumentEntity, DocumentStatus } from '../document/entities/document.entity';
+import {
+    DocumentEntity,
+    DocumentStatus,
+} from '../document/entities/document.entity';
 import {
     DocumentContent,
     DocumentContentDocument,
 } from '../document/schemas/document-content.schema';
 import { ChunkingService } from './chunking.service';
 import { EmbeddingService } from './embedding.service';
+import { GraphBuildService } from './graph-build.service';
+import { SearchIndexService } from './search-index.service';
 import { VectorIndexService } from './vector-index.service';
 import { PipelineDocument } from './types/pipeline.types';
-import { SearchIndexService } from './search-index.service';
-import { GraphBuildService } from './graph-build.service';
 
 /**
  * 发布后知识管线编排器
  *
  * <p>RAG：分块 → Embedding → ES kh_chunk</p>
- * <p>Search：整篇快照 → ES kh_document</p>
+ * <p>Search：Mongo 全文 → ES kh_document</p>
  * <p>KG：分块 → 抽实体关系 → Neo4j</p>
  *
  * <p>由 {@link DocumentPipelineConsumer} 在消费到 MQ 消息后调用；</p>
@@ -74,27 +77,23 @@ export class PipelineOrchestrator {
 
     /**
      * 处理 Search 索引消息。
-     * INDEX：消息内已带文档快照，直接写入 ES kh_document。
+     * INDEX：按 documentId 从 Postgres + Mongo 拉全文，写入 ES kh_document。
      * DELETE：按 documentId 删除。
      */
-    async handleSearchIndex(
-        type: string,
-        documentId: string,
-        document?: Record<string, unknown>,
-    ) {
+    async handleSearchIndex(type: string, documentId: string) {
         if (type === 'DELETE') {
             await this.searchIndexService.deleteDocument(documentId);
             return;
         }
 
         if (type === 'INDEX') {
-            if (!document) {
-                this.logger.warn(
-                    `Search INDEX 消息缺少 document 快照：documentId=${documentId}`,
-                );
+            const docs = await this.loadDocumentsByIds([documentId]);
+            const doc = docs[0];
+            if (!doc) {
+                this.logger.warn(`Search INDEX 文档不存在：documentId=${documentId}`);
                 return;
             }
-            await this.searchIndexService.indexDocument(document);
+            await this.searchIndexService.indexDocument(this.toSearchIndexDoc(doc));
             return;
         }
 
@@ -102,10 +101,10 @@ export class PipelineOrchestrator {
     }
 
     /**
-         * 处理 KG 建图消息。
-         * BUILD_*：读正文 → 分块 → 抽实体关系 → 写 Neo4j
-         * DELETE_*：删文档节点及其 chunk / 孤儿实体
-         */
+     * 处理 KG 建图消息。
+     * BUILD_*：读正文 → 分块 → 抽实体关系 → 写 Neo4j
+     * DELETE_*：删文档节点及其 chunk / 孤儿实体
+     */
     async handleKgBuild(type: string, documentIds?: string[]) {
         if (type === 'DELETE_BY_DOC_IDS' && documentIds?.length) {
             for (const id of documentIds) {
@@ -205,6 +204,27 @@ export class PipelineOrchestrator {
             result.push(this.toPipelineDoc(doc, contentDoc?.content ?? ''));
         }
         return result;
+    }
+
+    /** Postgres 元数据 + Mongo 全文 → ES kh_document 文档 */
+    private toSearchIndexDoc(doc: PipelineDocument): Record<string, unknown> {
+        return {
+            id: doc.id,
+            title: doc.title,
+            summary: doc.summary ?? null,
+            content: doc.content ?? '',
+            categoryId: doc.categoryId ?? null,
+            tags: doc.tags ?? null,
+            status: doc.status,
+            isPublic: doc.isPublic,
+            viewCount: doc.viewCount,
+            likeCount: doc.likeCount,
+            commentCount: doc.commentCount,
+            authorId: doc.authorId ?? null,
+            publishTime: this.toIsoDate(doc.publishTime),
+            createdAt: this.toIsoDate(doc.createdAt),
+            updatedAt: this.toIsoDate(doc.updatedAt),
+        };
     }
 
     /** Postgres 实体 + Mongo 正文 → 管线统一 DTO */

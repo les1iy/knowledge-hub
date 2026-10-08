@@ -1,8 +1,16 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConsumeMessage } from 'amqplib';
 import { PipelineOrchestrator } from '../pipeline/pipeline.orchestrator';
-import { KG_GRAPH_QUEUE, RAG_REINDEX_QUEUE, SEARCH_INDEX_QUEUE } from './mq.constants';
-import { KgBuildMessage, ReindexMessage, SearchIndexMessage } from './messages/pipeline.messages';
+import {
+    KG_GRAPH_QUEUE,
+    RAG_REINDEX_QUEUE,
+    SEARCH_INDEX_QUEUE,
+} from './mq.constants';
+import {
+    KgBuildMessage,
+    ReindexMessage,
+    SearchIndexMessage,
+} from './messages/pipeline.messages';
 import { RabbitMqService } from './rabbitmq.service';
 
 /**
@@ -44,11 +52,7 @@ export class DocumentPipelineConsumer {
         this.logger.log(
             `[Search] type=${body.type}, taskId=${body.taskId}, documentId=${body.documentId}`,
         );
-        await this.orchestrator.handleSearchIndex(
-            body.type,
-            body.documentId,
-            body.document,
-        );
+        await this.orchestrator.handleSearchIndex(body.type, body.documentId);
     }
 
     /** KG：分块 → 抽实体关系 → Neo4j */
