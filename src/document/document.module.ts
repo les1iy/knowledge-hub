@@ -8,6 +8,7 @@ import {
 } from './schemas/document-content.schema';
 import { FileParserService } from './parser/file-parser.service';
 import { DocumentReviewService } from './document-review.service';
+import { PipelineModule } from '../pipeline/pipeline.module';
 
 /**
      * 文档模块
@@ -19,6 +20,7 @@ import { DocumentReviewService } from './document-review.service';
     MongooseModule.forFeature([
       { name: DocumentContent.name, schema: DocumentContentSchema },
     ]),
+    PipelineModule,
   ],
   controllers: [DocumentController],
   providers: [DocumentService, DocumentReviewService, FileParserService],
