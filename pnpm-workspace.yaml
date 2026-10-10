@@ -1,4 +1,5 @@
 allowBuilds:
   '@parcel/watcher': set this to true or false
+  better-sqlite3: true
   tesseract.js: false
   unrs-resolver: set this to true or false
