@@ -1,3 +1,4 @@
+/// <reference path="../types/snowflake-id.d.ts" />
 import SnowflakeId from 'snowflake-id';
 
 const snowflake = new SnowflakeId({

@@ -1,16 +1,16 @@
+// types/snowflake-id.d.ts
 declare module 'snowflake-id' {
-    interface SnowflakeIdOptions {
-        /** 机器 ID（0–1023），分布式部署时各实例需唯一 */
+    export interface SnowflakeIdOptions {
+        /** 机器 ID (0-1023) */
         mid?: number;
-        /** 纪元偏移（毫秒），会从当前时间中减去 */
+        /** 纪元偏移 (毫秒) */
         offset?: number;
     }
 
-    class SnowflakeId {
+    // 直接使用 export default，完美适配你的业务代码 import
+    export default class SnowflakeId {
         constructor(options?: SnowflakeIdOptions);
-        /** 生成雪花 ID 字符串（JS number 无法安全表示 64 位整数） */
+        /** 生成雪花 ID 字符串 */
         generate(): string;
     }
-
-    export = SnowflakeId;
 }
